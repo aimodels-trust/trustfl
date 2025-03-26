@@ -43,7 +43,7 @@ numerical_features = ['LIMIT_BAL', 'AGE', 'BILL_AMT1', 'BILL_AMT2', 'BILL_AMT3',
 if prediction_mode == "Single Prediction":
     # Create input fields for features
     input_data = {}
-    
+
     # Input fields with restrictions and dropdown menus
     input_data['LIMIT_BAL'] = st.number_input('LIMIT_BAL (Credit Limit)', min_value=0, step=1000)
     input_data['SEX'] = st.selectbox('SEX', [1, 2], format_func=lambda x: 'Male' if x == 1 else 'Female')
@@ -68,16 +68,16 @@ if prediction_mode == "Single Prediction":
     input_data['PAY_AMT4'] = st.number_input('PAY_AMT4 (Amount Paid in June)', min_value=0, step=1000)
     input_data['PAY_AMT5'] = st.number_input('PAY_AMT5 (Amount Paid in May)', min_value=0, step=1000)
     input_data['PAY_AMT6'] = st.number_input('PAY_AMT6 (Amount Paid in April)', min_value=0, step=1000)
-
-    # Create a DataFrame from input data
-    input_df = pd.DataFrame([input_data])
     
-
+    
+    # Create a DataFrame from input data, making sure it has all expected columns
+    input_df = pd.DataFrame([input_data], columns=feature_names)  # Use feature_names to ensure order and all columns
+    
     # Create a Predict button
     if st.button("Predict"):
         # Standardize the input data using the first scaler
         input_df[numerical_features] = scalers[0].transform(input_df[numerical_features])
-
+        
         # Make prediction
         prediction = model.predict(input_df)[0][0]
 
@@ -98,15 +98,20 @@ elif prediction_mode == "Batch Prediction":
 
         # Create a Predict button
         if st.button("Predict"):
-            # Standardize the input data using the first scaler
-            batch_df[numerical_features] = scalers[0].transform(batch_df[numerical_features])
+            # Check if all required columns are present in the batch_df
+            missing_cols = set(feature_names) - set(batch_df.columns)
+            if missing_cols:
+                st.error(f"Error: The following columns are missing in the uploaded CSV: {missing_cols}")
+            else:
+                # Standardize the input data using the first scaler
+                batch_df[numerical_features] = scalers[0].transform(batch_df[numerical_features])
 
-            # Make predictions
-            predictions = model.predict(batch_df)
+                # Make predictions
+                predictions = model.predict(batch_df)
 
-            # Add predictions to the DataFrame
-            batch_df['Prediction'] = (predictions > 0.5).astype(int)  # Convert to 0 or 1
+                # Add predictions to the DataFrame
+                batch_df['Prediction'] = (predictions > 0.5).astype(int)  # Convert to 0 or 1
 
-            # Display predictions
-            st.subheader('Batch Predictions')
-            st.write(batch_df)  # Display the DataFrame with predictions
+                # Display predictions
+                st.subheader('Batch Predictions')
+                st.write(batch_df)  # Display the DataFrame with predictions
