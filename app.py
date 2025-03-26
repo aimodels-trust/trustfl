@@ -1,74 +1,60 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import tensorflow as tf
 import pickle
-from tensorflow import keras
+from sklearn.preprocessing import StandardScaler
 
-# Load the trained global model
-model = keras.models.load_model('federated_credit_card_model.keras')
+# Load the trained model
+model = tf.keras.models.load_model("/mnt/data/federated_credit_card_model.keras")
 
-# Load the scalers
-with open('scalers.pkl', 'rb') as f:
-    scalers = pickle.load(f)
-
-# Load the feature names
-with open('feature_names.pkl', 'rb') as f:
+# Load additional resources
+with open("/mnt/data/feature_names.pkl", "rb") as f:
     feature_names = pickle.load(f)
 
-# Streamlit app title
-st.title('Credit Card Default Prediction')
+with open("/mnt/data/scalers.pkl", "rb") as f:
+    scalers = pickle.load(f)
 
-# Add a radio button to select prediction mode
-prediction_mode = st.radio("Prediction Mode", ("Single Prediction", "Batch Prediction"))
+# Function to preprocess user input
+def preprocess_input(input_data, scaler):
+    input_df = pd.DataFrame([input_data], columns=feature_names)
+    input_scaled = scaler.transform(input_df)
+    return input_scaled
 
-if prediction_mode == "Single Prediction":
-    # Create input fields for features
-    input_data = {}
-    for feature in feature_names:
-        input_data[feature] = st.number_input(feature, value=0.0)
-    
-    # Create a DataFrame from input data
-    input_df = pd.DataFrame([input_data])
+# Streamlit UI
+st.title("Credit Card Default Prediction")
 
-    # Create a Predict button
-    if st.button("Predict"):
-        # Standardize the input data using the first scaler
-        numerical_features = ['LIMIT_BAL', 'AGE', 'BILL_AMT1', 'BILL_AMT2', 'BILL_AMT3',
-                              'BILL_AMT4', 'BILL_AMT5', 'BILL_AMT6', 'PAY_AMT1', 'PAY_AMT2',
-                              'PAY_AMT3', 'PAY_AMT4', 'PAY_AMT5', 'PAY_AMT6']
-        input_df[numerical_features] = scalers[0].transform(input_df[numerical_features])
+# Single Prediction Form
+st.header("Single Prediction")
+input_values = {}
+for feature in feature_names:
+    input_values[feature] = st.number_input(f"{feature}", value=0.0)
 
-        # Make prediction
-        prediction = model.predict(input_df)[0][0]
+if st.button("Predict Single Input"):
+    try:
+        input_scaled = preprocess_input(input_values, scalers)
+        prediction = model.predict(input_scaled)[0, 0]
+        st.write(f"### Probability of Default: {prediction:.2%}")
+        st.write("### Prediction:", "Default" if prediction > 0.5 else "No Default")
+    except Exception as e:
+        st.error(f"Error in prediction: {e}")
 
-        # Display prediction
-        st.subheader('Prediction')
-        if prediction > 0.5:
-            st.write('High risk of default')
+# Batch Prediction
+st.header("Batch Prediction")
+uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
+
+if uploaded_file is not None:
+    try:
+        data = pd.read_csv(uploaded_file)
+        if not set(feature_names).issubset(data.columns):
+            st.error("Uploaded file does not contain the correct features.")
         else:
-            st.write('Low risk of default')
-            
-elif prediction_mode == "Batch Prediction":
-    # Upload CSV file
-    uploaded_file = st.file_uploader("Upload CSV file for batch prediction", type=["csv"])
-
-    if uploaded_file is not None:
-        # Read the CSV file into a Pandas DataFrame
-        batch_df = pd.read_csv(uploaded_file)
-        
-        # Create a Predict button
-        if st.button("Predict"):
-            # Standardize the input data using the first scaler
-            numerical_features = ['LIMIT_BAL', 'AGE', 'BILL_AMT1', 'BILL_AMT2', 'BILL_AMT3',
-                                  'BILL_AMT4', 'BILL_AMT5', 'BILL_AMT6', 'PAY_AMT1', 'PAY_AMT2',
-                                  'PAY_AMT3', 'PAY_AMT4', 'PAY_AMT5', 'PAY_AMT6']
-            batch_df[numerical_features] = scalers[0].transform(batch_df[numerical_features])
-
-            # Make predictions
-            predictions = model.predict(batch_df)
-
-            # Add predictions to the DataFrame
-            batch_df['Prediction'] = (predictions > 0.5).astype(int)  # Convert to 0 or 1
-
-            # Display predictions
-            st.subheader('Batch Predictions')
-            st.write(batch_df)  # Display the DataFrame with predictions
+            data = data[feature_names]
+            data_scaled = scalers.transform(data)
+            predictions = model.predict(data_scaled).flatten()
+            data["Probability of Default"] = predictions
+            data["Prediction"] = ["Default" if p > 0.5 else "No Default" for p in predictions]
+            st.write(data)
+            st.download_button("Download Predictions", data.to_csv(index=False), "predictions.csv")
+    except Exception as e:
+        st.error(f"Error processing file: {e}")
