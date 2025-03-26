@@ -4,7 +4,7 @@ import pickle
 from tensorflow import keras
 
 # Load the trained global model
-model = keras.models.load_model('federated_credit_card_model.keras')
+model = keras.models.load_model('federated_credit_card_model (1).keras')
 
 # Load the scalers
 with open('scalers.pkl', 'rb') as f:
